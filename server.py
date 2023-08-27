@@ -1,6 +1,5 @@
 import socket
 import threading
-import time
 from pymongo import MongoClient
 
 client = MongoClient("mongodb://mongoadmin:secret@localhost:27017/")
@@ -9,6 +8,8 @@ questions_collection = db['perguntas']
 
 def handle_client(client_socket):
     score = 0  # Inicializa a pontuação do cliente
+
+    all_questions_answered = False
 
     for question in questions_collection.find().limit(3):
         question_text = question['question'] + "\n"
@@ -40,14 +41,18 @@ def handle_client(client_socket):
     final_score = f"Você acertou {score} questões.\n"
     client_socket.sendall(str.encode(final_score))
 
-    time.sleep(3)
+    all_questions_answered = True
 
-    print("Fechando conexão...")
-    client_socket.close()
+    client_socket.sendall(str.encode("CONFIRMATION"))  # Envia mensagem de confirmação
+    confirmation = client_socket.recv(1024).decode().strip()  # Recebe a confirmação do cliente
+
+    if confirmation == "RECEIVED":
+        print("Fechando conexão...")
+        client_socket.close()
 
 def main():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(('localhost', 40002))
+    server.bind(('localhost', 40007))
     server.listen(5)
 
     print("Aguardando conexão...")

@@ -2,7 +2,7 @@ import socket
 
 # Configurar o cliente
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect(('localhost', 40002))
+client.connect(('localhost', 40007))
 
 # Receber e responder às questões
 for _ in range(3):
@@ -21,4 +21,5 @@ for _ in range(3):
     feedback = client.recv(4096).decode()
     print(feedback)
 
+client.sendall(str.encode("RECEIVED"))
 client.close()
