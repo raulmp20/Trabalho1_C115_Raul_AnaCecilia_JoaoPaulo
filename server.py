@@ -1,38 +1,63 @@
 import socket
+import threading
+import time
 from pymongo import MongoClient
 
 client = MongoClient("mongodb://mongoadmin:secret@localhost:27017/")
 db = client['questions']
 questions_collection = db['perguntas']
 
-# Configurar o servidor
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind(('localhost', 20000))
-server.listen(1)
+def handle_client(client_socket):
+    score = 0  # Inicializa a pontuação do cliente
 
-print("Aguardando conexão...")
-connection, address = server.accept()
-print("Conexão estabelecida:", address)
+    for question in questions_collection.find().limit(3):
+        question_text = question['question'] + "\n"
+        options = question['options']
 
-# Enviar questões ao cliente e receber respostas
-for question in questions_collection.find().limit(3):
-    question_text = question['question'] + "\n"
-    for idx, choice in enumerate(question['options']):
-        question_text += f"{chr(97 + idx)}) {choice}\n"
+        for idx, choice in enumerate(options):
+            question_text += f"{idx}) {choice}\n"
 
-    connection.sendall(str.encode(question_text))
-    answer = connection.recv(1024).decode()
+        client_socket.sendall(str.encode(question_text))
 
-    correct_answer = chr(97 + question['options'].index(question['correct_answer']))
+        while True:
+            user_answer = client_socket.recv(1024).decode().strip()
+            if user_answer.isdigit() and 0 <= int(user_answer) < len(options):
+                break
+            else:
+                client_socket.sendall(str.encode("Por favor, insira um número válido.\n"))
 
-    if answer == correct_answer:
-        feedback = "\n Resposta correta! \n"
-    else:
-        feedback = f"\n Resposta Errada! A resposta correta é {correct_answer} \n"
+        correct_answer_index = int(question['correct_answer'])
 
-    connection.sendall(str.encode(feedback))
+        if user_answer == str(correct_answer_index):
+            score += 1  # Incrementa a pontuação se a resposta estiver correta
+            feedback = "\nResposta correta!\n"
+        else:
+            feedback = f"\nResposta Errada! A resposta correta é a opção {correct_answer_index}\n"
 
-print("Fechando conexao...")
+        client_socket.sendall(str.encode(feedback))
 
-connection.close()
-server.close()
+    # Após todas as questões terem sido respondidas, envie a pontuação final
+    final_score = f"Você acertou {score} questões.\n"
+    client_socket.sendall(str.encode(final_score))
+
+    time.sleep(3)
+
+    print("Fechando conexão...")
+    client_socket.close()
+
+def main():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(('localhost', 40002))
+    server.listen(5)
+
+    print("Aguardando conexão...")
+
+    while True:
+        client_socket, addr = server.accept()
+        print("Conexão estabelecida:", addr)
+
+        client_handler = threading.Thread(target=handle_client, args=(client_socket,))
+        client_handler.start()
+
+if __name__ == '__main__':
+    main()
